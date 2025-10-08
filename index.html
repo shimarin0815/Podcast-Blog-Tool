@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Content Creator for Podcasters</title>
+    <script type="module">
+        // GoogleのAIライブラリを直接読み込みます
+        import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+        // windowオブジェクトに登録して、下のscriptタグからでも使えるようにします
+        window.GoogleGenerativeAI = GoogleGenerativeAI;
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
+
+        /* 色やフォントなどの基本設定 */
+        :root {
+            --bg-color: #1a1a2e;
+            --primary-color: #16213e;
+            --secondary-color: #0f3460;
+            --accent-color: #e94560;
+            --text-color: #e0e0e0;
+            --border-radius: 12px;
+            --font-family: 'Noto Sans JP', sans-serif;
+            --box-shadow: 0 4px S15px rgba(0, 0, 0, 0.4);
+        }
+
+        /* 基本的なスタイルリセット */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .header {
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            color: var(--text-color);
+            opacity: 0.8;
+        }
+
+        /* カードUIの基本スタイル */
+        .card {
+            background-color: var(--primary-color);
+            padding: 2rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            border: 1px solid var(--secondary-color);
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-header .icon {
+            font-size: 1.5rem;
+        }
+        
+        .card-header h2 {
+            font-size: 1.25rem;
+            font-weight: 500;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 0.8rem 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--secondary-color);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-family);
+            font-size: 1rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        input[type="text"]:focus, textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.3);
+        }
+
+        textarea {
+            min-height: 200px;
+            resize: vertical;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .btn {
+            flex-grow: 1;
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            background-color: var(--accent-color);
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s, opacity 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn:hover {
+            background-color: #d43d51;
+            transform: translateY(-2px);
+        }
+
+        /* ボタンが無効化された時のスタイルを追加 */
+        .btn:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+            transform: none;
+            opacity: 0.6;
+        }
+
+        .output-card {
+            display: none; /* 最初は隠しておく */
+        }
+
+        .output-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .copy-btn {
+            background: var(--secondary-color);
+            border: 1px solid var(--accent-color);
+            color: var(--text-color);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .copy-btn:hover {
+            background-color: var(--accent-color);
+        }
+
+        .output-content {
+            background-color: var(--bg-color);
+            padding: 1.5rem;
+            border-radius: 8px;
+            white-space: pre-wrap; /* 改行をそのまま表示する */
+            min-height: 100px;
+            border: 1px solid var(--secondary-color);
+        }
+        
+        .loader-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: none; /* 最初は隠しておく */
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .loader {
+            border: 6px solid #f3f3f3;
+            border-top: 6px solid var(--accent-color);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+
+        .loader-overlay p {
+            color: #fff;
+            font-size: 1.2rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 1rem;
+            color: var(--text-color);
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header class="header">
+            <h1>AI Content Creator</h1>
+            <p>ポッドキャストや動画の文字起こしから、要約とブログ記事を自動生成します。</p>
+        </header>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="icon">🔑</span>
+                <h2>STEP 1: Google AI APIキーを設定</h2>
+            </div>
+            <div class="form-group">
+                <label for="apiKey">APIキー（合言葉）を入力してください</label>
+                <input type="text" id="apiKey" placeholder="ここにAPIキーを貼り付け">
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="icon">✍️</span>
+                <h2>STEP 2: 文字起こしテキストを入力</h2>
+            </div>
+            <div class="form-group">
+                <label for="transcript">ここに文字起こしした文章を貼り付けてください</label>
+                <textarea id="transcript" placeholder="例：皆さんこんにちは！今回のテーマは「AIと未来」です。AIは私たちの生活を大きく変える可能性を秘めています..."></textarea>
+                <div class="button-group">
+                    <button id="summarizeBtn" class="btn">
+                        <span>📝</span> 要約を作成
+                    </button>
+                    <button id="blogifyBtn" class="btn">
+                        <span>📰</span> ブログ記事を作成
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="summaryOutput" class="card output-card">
+            <div class="output-header">
+                <h2>AIによる要約</h2>
+                <button class="copy-btn" data-target="summaryContent">コピー</button>
+            </div>
+            <div id="summaryContent" class="output-content"></div>
+        </div>
+
+        <div id="blogOutput" class="card output-card">
+            <div class="output-header">
+                <h2>AIによるブログ記事</h2>
+                <button class="copy-btn" data-target="blogContent">コピー</button>
+            </div>
+            <div id="blogContent" class="output-content"></div>
+        </div>
+        
+        <footer>
+            <p>&copy; 2025 Your Name Here. Powered by Google Gemini.</p>
+        </footer>
+    </div>
+    
+    <div id="loader" class="loader-overlay">
+        <div class="loader"></div>
+        <p>AIが考え中です...</p>
+    </div>
+
+    <script>
+        // --- HTML要素の取得 ---
+        const apiKeyInput = document.getElementById('apiKey');
+        const transcriptInput = document.getElementById('transcript');
+        const summarizeBtn = document.getElementById('summarizeBtn');
+        const blogifyBtn = document.getElementById('blogifyBtn');
+        
+        const summaryOutputCard = document.getElementById('summaryOutput');
+        const blogOutputCard = document.getElementById('blogOutput');
+        const summaryContent = document.getElementById('summaryContent');
+        const blogContent = document.getElementById('blogContent');
+        const loader = document.getElementById('loader');
+
+        // --- AIを呼び出す中心的な関数 ---
+        async function runAi(prompt) {
+            const apiKey = apiKeyInput.value;
+            if (!apiKey) {
+                alert("APIキーを入力してください！");
+                return null;
+            }
+
+            loader.style.display = 'flex';
+            setButtonsDisabled(true); // ★改善点：ボタンを無効化
+
+            try {
+                const genAI = new window.GoogleGenerativeAI(apiKey);
+                const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+                const result = await model.generateContent(prompt);
+                const response = await result.response;
+                return response.text();
+            } catch (error) {
+                console.error("AI Error:", error);
+                alert("エラーが発生しました。APIキーが正しいか、コンソールを確認してください。");
+                return null;
+            } finally {
+                loader.style.display = 'none';
+                setButtonsDisabled(false); // ★改善点：ボタンを有効化に戻す
+            }
+        }
+
+        // --- イベントリスナー（ボタンが押された時の処理） ---
+        summarizeBtn.addEventListener('click', async () => {
+            const transcript = transcriptInput.value;
+            if (!transcript) {
+                alert("文字起こしテキストを入力してください！");
+                return;
+            }
+            const prompt = `以下のポッドキャストの文字起こしを、概要欄で使えるように200字程度で簡潔に要約してください。要点は箇条書きで分かりやすくまとめてください。\n\n---\n${transcript}`;
+            
+            const result = await runAi(prompt);
+            if (result) {
+                summaryContent.textContent = result;
+                summaryOutputCard.style.display = 'block';
+            }
+        });
+
+        blogifyBtn.addEventListener('click', async () => {
+            const transcript = transcriptInput.value;
+            if (!transcript) {
+                alert("文字起こしテキストを入力してください！");
+                return;
+            }
+            const prompt = `以下のポッドキャストの文字起こしを元に、読者の興味を引くような魅力的なブログ記事を作成してください。キャッチーなタイトル、導入文、複数の見出し、そしてまとめを含めてください。箇条書きや太字も効果的に使い、読みやすく構成してください。\n\n---\n${transcript}`;
+            
+            const result = await runAi(prompt);
+            if (result) {
+                blogContent.textContent = result;
+                blogOutputCard.style.display = 'block';
+            }
+        });
+
+        // --- 補助的な関数 ---
+        
+        /**
+         * ★改善点：ボタンを無効化/有効化するための関数
+         * @param {boolean} disabled - trueなら無効化, falseなら有効化
+         */
+        function setButtonsDisabled(disabled) {
+            summarizeBtn.disabled = disabled;
+            blogifyBtn.disabled = disabled;
+        }
+
+        // コピーボタンの機能を設定
+        document.querySelectorAll('.copy-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                const targetId = button.dataset.target;
+                const contentToCopy = document.getElementById(targetId).textContent;
+                navigator.clipboard.writeText(contentToCopy).then(() => {
+                    button.textContent = 'コピー完了！';
+                    setTimeout(() => {
+                        button.textContent = 'コピー';
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Copy failed', err);
+                    alert('コピーに失敗しました。');
+                });
+            });
+        });
+    </script>
+</body>
+</html>
